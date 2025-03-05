@@ -1,11 +1,11 @@
 package com.example.parking.service.implementation;
 
-import com.example.parking.model.ReservationRequest;
-import com.example.parking.model.ReservationResponse;
-import com.example.parking.exception.ParkingFullException;
-import com.example.parking.exception.ReservationNotFoundException;
 import com.example.parking.entity.ParkingReservation;
 import com.example.parking.entity.ParkingSpace;
+import com.example.parking.exception.ParkingFullException;
+import com.example.parking.exception.ReservationNotFoundException;
+import com.example.parking.model.ReservationRequest;
+import com.example.parking.model.ReservationResponse;
 import com.example.parking.repository.ParkingReservationRepository;
 import com.example.parking.service.contract.ParkingService;
 import org.springframework.stereotype.Service;
@@ -29,16 +29,16 @@ public class ParkingServiceImpl implements ParkingService {
     @Override
     public ReservationResponse createReservation(ReservationRequest request) {
         // Validate that start time is in the future
-        if (request.startTime().isBefore(LocalDateTime.now())) {
+        if (request.getStartTime().isBefore(LocalDateTime.now())) {
             throw new IllegalArgumentException("Reservation start time must be in the future");
         }
 
         // Calculate end time (1 hour slot)
-        var endTime = request.startTime().plusHours(1);
+        var endTime = request.getStartTime().plusHours(1);
 
         // Find active reservations for the requested time slot
         var activeReservations = reservationRepository.findAllByTimeRange(
-                request.startTime(), endTime);
+                request.getStartTime(), endTime);
 
         // Check if parking lot utilization would exceed 80%
         var maxSpaces = parkingSpaces.size() * MAX_CAPACITY_PERCENT / 100;
@@ -48,7 +48,7 @@ public class ParkingServiceImpl implements ParkingService {
 
         // Find an available space
         var availableSpaceOpt = parkingSpaces.stream()
-                .filter(space -> isSpaceAvailable(space, request.startTime(), endTime))
+                .filter(space -> isSpaceAvailable(space, request.getStartTime(), endTime))
                 .findFirst();
 
         if (availableSpaceOpt.isEmpty()) {
@@ -60,9 +60,9 @@ public class ParkingServiceImpl implements ParkingService {
         // Create and save reservation
         var reservation = new ParkingReservation(
                 availableSpace.getId(),
-                request.startTime(),
+                request.getStartTime(),
                 endTime,
-                request.licensePlate()
+                request.getLicensePlate()
         );
 
         var savedReservation = reservationRepository.save(reservation);
@@ -110,5 +110,10 @@ public class ParkingServiceImpl implements ParkingService {
                 reservation.getEndTime(),
                 reservation.getLicensePlate()
         );
+    }
+
+    @Override
+    public int getTotalSpaces() {
+        return parkingSpaces.size();
     }
 }

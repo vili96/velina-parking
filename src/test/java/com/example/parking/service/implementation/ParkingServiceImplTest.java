@@ -1,10 +1,10 @@
 package com.example.parking.service.implementation;
 
-import com.example.parking.model.ReservationRequest;
-import com.example.parking.exception.ParkingFullException;
-import com.example.parking.exception.ReservationNotFoundException;
 import com.example.parking.entity.ParkingReservation;
 import com.example.parking.entity.ParkingSpace;
+import com.example.parking.exception.ParkingFullException;
+import com.example.parking.exception.ReservationNotFoundException;
+import com.example.parking.model.ReservationRequest;
 import com.example.parking.repository.ParkingReservationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,7 +21,6 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
-import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class ParkingServiceImplTest {
@@ -80,9 +79,9 @@ class ParkingServiceImplTest {
 
         // Assert
         assertNotNull(result);
-        assertEquals(mockReservation.getId(), result.reservationId());
-        assertEquals(mockReservation.getSpaceId(), result.spaceId());
-        assertEquals(mockReservation.getLicensePlate(), result.licensePlate());
+        assertEquals(mockReservation.getId(), result.getReservationId());
+        assertEquals(mockReservation.getSpaceId(), result.getSpaceId());
+        assertEquals(mockReservation.getLicensePlate(), result.getLicensePlate());
 
         verify(reservationRepository, times(1)).save(any());
     }
@@ -165,8 +164,8 @@ class ParkingServiceImplTest {
 
         // Assert
         assertNotNull(result);
-        assertEquals(mockReservation.getId(), result.reservationId());
-        assertEquals(mockReservation.getSpaceId(), result.spaceId());
+        assertEquals(mockReservation.getId(), result.getReservationId());
+        assertEquals(mockReservation.getSpaceId(), result.getSpaceId());
     }
 
     @Test
@@ -193,6 +192,6 @@ class ParkingServiceImplTest {
         // Assert
         assertNotNull(result);
         assertEquals(1, result.size());
-        assertEquals(mockReservation.getId(), result.get(0).reservationId());
+        assertEquals(mockReservation.getId(), result.getFirst().getReservationId());
     }
 }
