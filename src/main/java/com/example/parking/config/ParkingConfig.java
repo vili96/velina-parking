@@ -7,10 +7,10 @@ import org.springframework.context.annotation.Configuration;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.example.parking.util.Constants.TOTAL_PARKING_SPACES;
+
 @Configuration
 public class ParkingConfig {
-
-    private static final int TOTAL_PARKING_SPACES = 100;
 
     @Bean
     public List<ParkingSpace> parkingSpaces() {

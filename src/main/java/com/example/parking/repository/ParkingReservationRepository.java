@@ -14,44 +14,35 @@ public interface ParkingReservationRepository extends JpaRepository<ParkingReser
 
     @Query("""
             SELECT r FROM ParkingReservation r
-             WHERE (r.startTime < :endTime AND r.endTime > :startTime)
-             """)
+            WHERE (r.startTime < :endTime AND r.endTime > :startTime)
+            """)
     List<ParkingReservation> findAllByTimeRange(@Param("startTime") Instant startTime,
                                                 @Param("endTime") Instant endTime);
 
     @Query("""
-            SELECT r FROM ParkingReservation r
-            WHERE r.spaceId = :spaceId
-            AND (r.startTime < :endTime AND r.endTime > :startTime)
-            """)
-    List<ParkingReservation> findAllBySpaceIdAndTimeRange(@Param("spaceId") int spaceId,
-                                                          @Param("startTime") Instant startTime,
-                                                          @Param("endTime") Instant endTime);
-
-    @Query("""
             SELECT COUNT(r) FROM ParkingReservation r
-            WHERE (r.startTime < :endTime AND r.endTime > :startTime)
+            WHERE (r.startTime < :endTime
+            AND r.endTime > :startTime)
             """)
     long countByTimeRange(@Param("startTime") Instant startTime,
                           @Param("endTime") Instant endTime);
 
     @Query("""
-       SELECT r FROM ParkingReservation r
-       WHERE r.licensePlate = :licensePlate
-         AND r.startTime = :startTime
-       """)
+            SELECT r FROM ParkingReservation r
+            WHERE r.licensePlate = :licensePlate
+            AND r.startTime = :startTime
+            """)
     List<ParkingReservation> findByLicensePlateAndExactStart(
             @Param("licensePlate") String licensePlate,
             @Param("startTime") Instant startTime);
 
     @Query("""
-       SELECT r FROM ParkingReservation r
-       WHERE r.licensePlate = :licensePlate
-         AND (r.startTime < :endTime AND r.endTime > :startTime)
-       """)
+            SELECT r FROM ParkingReservation r
+            WHERE r.licensePlate = :licensePlate
+            AND (r.startTime < :endTime AND r.endTime > :startTime)
+            """)
     List<ParkingReservation> findOverlappingByLicensePlate(
             @Param("licensePlate") String licensePlate,
             @Param("startTime") Instant startTime,
             @Param("endTime") Instant endTime);
-
 }

@@ -13,11 +13,9 @@ import java.time.ZoneId;
 @Mapper(componentModel = "spring")
 public interface ReservationMapper {
 
-    @Mapping(source = "id",           target = "reservationId")
-    @Mapping(source = "spaceId",      target = "spaceId")
-    @Mapping(source = "licensePlate", target = "licensePlate")
-    @Mapping(source = "startTime",    target = "startTime", qualifiedByName = "instantToLocalDateTime")
-    @Mapping(source = "endTime",      target = "endTime",   qualifiedByName = "instantToLocalDateTime")
+    @Mapping(source = "id", target = "reservationId")
+    @Mapping(source = "startTime", target = "startTime", qualifiedByName = "instantToLocalDateTime")
+    @Mapping(source = "endTime", target = "endTime", qualifiedByName = "instantToLocalDateTime")
     ReservationResponse toResponse(ParkingReservation reservation);
 
     @Named("instantToLocalDateTime")

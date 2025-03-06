@@ -6,6 +6,9 @@ import lombok.Getter;
 import java.time.LocalDateTime;
 import java.util.Map;
 
+import static com.example.parking.util.Constants.ERROR_STATUS;
+import static com.example.parking.util.Constants.SUCCESS_STATUS;
+
 @Getter
 @AllArgsConstructor
 public class ApiResponse<T> {
@@ -15,16 +18,16 @@ public class ApiResponse<T> {
     private final LocalDateTime timestamp;
 
     public static <T> ApiResponse<T> success(T data) {
-        return new ApiResponse<>("success", data, null, LocalDateTime.now());
+        return new ApiResponse<>(SUCCESS_STATUS, data, null, LocalDateTime.now());
     }
 
     public static <T> ApiResponse<T> error(String message, int code) {
-        return new ApiResponse<>("error", null, new ErrorInfo(message, code), LocalDateTime.now());
+        return new ApiResponse<>(ERROR_STATUS, null, new ErrorInfo(message, code), LocalDateTime.now());
     }
 
     public static <T> ApiResponse<T> validationError(String message, int code, Map<String, String> fieldErrors) {
         return new ApiResponse<>(
-                "error",
+                ERROR_STATUS,
                 null,
                 new ErrorInfo(message, code, fieldErrors),
                 LocalDateTime.now()

@@ -6,8 +6,6 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-//@Getter
-//@Setter
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -17,6 +15,4 @@ public class ReservationResponse {
     private LocalDateTime startTime;
     private LocalDateTime endTime;
     private String licensePlate;
-
-    // Remove all manually written getters/setters
 }

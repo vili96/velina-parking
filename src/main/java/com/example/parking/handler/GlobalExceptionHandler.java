@@ -13,6 +13,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.HashMap;
 
+import static com.example.parking.util.Constants.UNEXPECTED_ERROR_OCCURRED;
+import static com.example.parking.util.Constants.VALIDATION_ERROR;
+
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -42,7 +45,7 @@ public class GlobalExceptionHandler {
         });
 
         return new ResponseEntity<>(
-                ApiResponse.validationError("Validation error", HttpStatus.BAD_REQUEST.value(), errors),
+                ApiResponse.validationError(VALIDATION_ERROR, HttpStatus.BAD_REQUEST.value(), errors),
                 HttpStatus.BAD_REQUEST
         );
     }
@@ -50,7 +53,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleGeneralException(Exception ex) {
         return new ResponseEntity<>(
-                ApiResponse.error("An unexpected error occurred", HttpStatus.INTERNAL_SERVER_ERROR.value()),
+                ApiResponse.error(UNEXPECTED_ERROR_OCCURRED, HttpStatus.INTERNAL_SERVER_ERROR.value()),
                 HttpStatus.INTERNAL_SERVER_ERROR
         );
     }

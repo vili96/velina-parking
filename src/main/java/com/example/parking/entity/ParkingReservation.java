@@ -10,7 +10,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 @Entity
-@Data  // This generates getters/setters, equals, hashCode, toString
+@Data
 @NoArgsConstructor
 @Table(name = "parking_reservations")
 public class ParkingReservation {
@@ -21,7 +21,6 @@ public class ParkingReservation {
     private Instant endTime;
     private String licensePlate;
 
-    // Constructors remain the same
     public ParkingReservation(int spaceId, Instant startTime, Instant endTime, String licensePlate) {
         this.id = UUID.randomUUID().toString();
         this.spaceId = spaceId;
@@ -37,6 +36,4 @@ public class ParkingReservation {
         this.endTime = endTime;
         this.licensePlate = licensePlate;
     }
-
-    // Remove all manually written getters/setters
 }
