@@ -11,8 +11,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/parking")
@@ -21,7 +19,9 @@ public class ParkingController {
     private final ParkingService parkingService;
 
     @PostMapping("/reservations")
-    public ResponseEntity<ApiResponse<ReservationResponse>> createReservation(@Valid @RequestBody ReservationRequest request) {
+    public ResponseEntity<ApiResponse<ReservationResponse>> createReservation(
+            @Valid @RequestBody ReservationRequest request
+    ) {
         var response = parkingService.createReservation(request);
         return new ResponseEntity<>(ApiResponse.success(response), HttpStatus.CREATED);
     }
@@ -42,7 +42,7 @@ public class ParkingController {
     public ResponseEntity<ApiResponse<ReservationListResponse>> getAllReservations() {
         var reservations = parkingService.getAllReservations();
         var totalSpaces = parkingService.getTotalSpaces();
-        var reservationListResponse = ReservationListResponse.from(reservations, totalSpaces);
-        return new ResponseEntity<>(ApiResponse.success(reservationListResponse), HttpStatus.OK);
+        var listResponse = ReservationListResponse.from(reservations, totalSpaces);
+        return new ResponseEntity<>(ApiResponse.success(listResponse), HttpStatus.OK);
     }
 }

@@ -1,34 +1,22 @@
 package com.example.parking.model;
 
 import lombok.AllArgsConstructor;
-import lombok.Getter;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/**
- * Response model for a single parking reservation.
- * Contains all the details about a specific reservation.
- */
-@Getter
+//@Getter
+//@Setter
+@Data
+@NoArgsConstructor
 @AllArgsConstructor
 public class ReservationResponse {
-    private final String reservationId;
-    private final int spaceId;
-    private final LocalDateTime startTime;
-    private final LocalDateTime endTime;
-    private final String licensePlate;
-    private final boolean active;
+    private String reservationId;
+    private int spaceId;
+    private LocalDateTime startTime;
+    private LocalDateTime endTime;
+    private String licensePlate;
 
-    /**
-     * Simplified constructor that assumes the reservation is active.
-     */
-    public ReservationResponse(
-            String reservationId,
-            int spaceId,
-            LocalDateTime startTime,
-            LocalDateTime endTime,
-            String licensePlate
-    ) {
-        this(reservationId, spaceId, startTime, endTime, licensePlate, true);
-    }
+    // Remove all manually written getters/setters
 }

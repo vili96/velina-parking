@@ -1,7 +1,12 @@
 package com.example.parking.entity;
 
+import lombok.Getter;
+import lombok.Setter;
+
 import java.util.Objects;
 
+@Getter
+@Setter
 public class ParkingSpace {
     private final int id;
     private boolean available;
@@ -9,18 +14,6 @@ public class ParkingSpace {
     public ParkingSpace(int id) {
         this.id = id;
         this.available = true;
-    }
-
-    public int getId() {
-        return id;
-    }
-
-    public boolean isAvailable() {
-        return available;
-    }
-
-    public void setAvailable(boolean available) {
-        this.available = available;
     }
 
     @Override

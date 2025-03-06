@@ -1,6 +1,7 @@
 package com.example.parking.handler;
 
 import com.example.parking.exception.ParkingFullException;
+import com.example.parking.exception.ReservationConflictException;
 import com.example.parking.exception.ReservationNotFoundException;
 import com.example.parking.model.ApiResponse;
 import org.springframework.http.HttpStatus;
@@ -35,8 +36,8 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleValidationExceptions(MethodArgumentNotValidException ex) {
         var errors = new HashMap<String, String>();
         ex.getBindingResult().getAllErrors().forEach(error -> {
-            String fieldName = ((FieldError) error).getField();
-            String errorMessage = error.getDefaultMessage();
+            var fieldName = ((FieldError) error).getField();
+            var errorMessage = error.getDefaultMessage();
             errors.put(fieldName, errorMessage);
         });
 
@@ -51,6 +52,14 @@ public class GlobalExceptionHandler {
         return new ResponseEntity<>(
                 ApiResponse.error("An unexpected error occurred", HttpStatus.INTERNAL_SERVER_ERROR.value()),
                 HttpStatus.INTERNAL_SERVER_ERROR
+        );
+    }
+
+    @ExceptionHandler(ReservationConflictException.class)
+    public ResponseEntity<ApiResponse<Void>> handleReservationConflictException(ReservationConflictException ex) {
+        return new ResponseEntity<>(
+                ApiResponse.error(ex.getMessage(), HttpStatus.CONFLICT.value()),
+                HttpStatus.CONFLICT
         );
     }
 }
