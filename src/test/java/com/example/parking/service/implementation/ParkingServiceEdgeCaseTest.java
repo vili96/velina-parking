@@ -1,24 +1,29 @@
 package com.example.parking.service.implementation;
 
-import com.example.parking.model.ReservationRequest;
-import com.example.parking.exception.ParkingFullException;
 import com.example.parking.entity.ParkingReservation;
 import com.example.parking.entity.ParkingSpace;
+import com.example.parking.exception.ParkingFullException;
+import com.example.parking.mapper.ReservationMapper;
 import com.example.parking.repository.ParkingReservationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mapstruct.factory.Mappers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import java.util.stream.Stream;
 
+import static com.example.parking.util.ParkingServiceTestHelper.*;
+import static com.example.parking.util.TestConstants.*;
+import static com.example.parking.util.TimeUtil.getTimeOneHourLater;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -32,192 +37,143 @@ class ParkingServiceEdgeCaseTest {
     @Mock
     private List<ParkingSpace> parkingSpaces;
 
+    @Spy
+    private ReservationMapper reservationMapper = Mappers.getMapper(ReservationMapper.class);
+
     @InjectMocks
     private ParkingServiceImpl parkingService;
 
-    private LocalDateTime futureTime;
-    private List<ParkingSpace> mockSpaces;
+    private LocalDateTime futureLdtTime;
+    private Instant futureTime;
 
     @BeforeEach
     void setUp() {
-        // Setup future time for valid reservations
-        futureTime = LocalDateTime.now().plusHours(2);
+        futureLdtTime = LocalDateTime.now().plusHours(2);
+        futureTime = futureLdtTime.atZone(ZoneId.systemDefault()).toInstant();
 
-        // Create a list of 100 mock parking spaces
-        mockSpaces = IntStream.rangeClosed(1, 100)
+        List<ParkingSpace> mockSpaces = IntStream.rangeClosed(1, TOTAL_SPACES)
                 .mapToObj(ParkingSpace::new)
-                .collect(Collectors.toList());
+                .toList();
 
-        // Setup common mock behaviors
-        lenient().when(parkingSpaces.size()).thenReturn(100);
+        lenient().when(parkingSpaces.size()).thenReturn(TOTAL_SPACES);
         lenient().when(parkingSpaces.stream()).thenReturn(mockSpaces.stream());
     }
 
     @Test
     void testCapacityLimit_ExactlyAt80Percent() {
-        // Arrange
-        var request = new ReservationRequest(futureTime, "TEST001");
+        var request = createReservationRequest(futureLdtTime, TEST_PLATE_001);
 
-        // Create 79 existing reservations (just under 80%)
-        var existingReservations = new ArrayList<ParkingReservation>();
-        for (int i = 0; i < 79; i++) {
-            existingReservations.add(createMockReservation(i + 1));
-        }
+        when(reservationRepository.countByTimeRange(any(Instant.class), any(Instant.class)))
+                .thenReturn(ALMOST_MAX_CAPACITY);
 
-        when(reservationRepository.findAllByTimeRange(any(), any()))
-                .thenReturn(existingReservations);
-        when(reservationRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(reservationRepository.findAllByTimeRange(any(Instant.class), any(Instant.class)))
+                .thenReturn(new ArrayList<>());
 
-        // Act & Assert
-        // The 80th reservation should be allowed (exactly 80%)
+        when(reservationRepository.save(any())).thenAnswer(i -> {
+            var res = (ParkingReservation) i.getArgument(0);
+            return createMockReservation(res.getSpaceId(), res.getStartTime(), res.getEndTime(), res.getLicensePlate());
+        });
+
+        doAnswer(invocation -> {
+            var res = (ParkingReservation) invocation.getArgument(0);
+            return createReservationResponse(res);
+        }).when(reservationMapper).toResponse(any());
+
         assertDoesNotThrow(() -> parkingService.createReservation(request));
+        verify(reservationRepository, times(1)).save(any());
     }
 
     @Test
     void testCapacityLimit_Exceeds80Percent() {
-        // Arrange
-        var request = new ReservationRequest(futureTime, "TEST001");
+        var request = createReservationRequest(futureLdtTime, TEST_PLATE_001);
 
-        // Create 80 existing reservations (exactly 80%)
-        var existingReservations = new ArrayList<ParkingReservation>();
-        for (int i = 0; i < 80; i++) {
-            existingReservations.add(createMockReservation(i + 1));
-        }
+        when(reservationRepository.countByTimeRange(any(Instant.class), any(Instant.class)))
+                .thenReturn(MAX_CAPACITY_LIMIT);
 
-        when(reservationRepository.findAllByTimeRange(any(), any()))
-                .thenReturn(existingReservations);
-
-        // Act & Assert
-        // The 81st reservation should throw an exception (exceeds 80%)
         var exception = assertThrows(ParkingFullException.class,
                 () -> parkingService.createReservation(request));
-        assertTrue(exception.getMessage().contains("maximum capacity"));
+        assertTrue(exception.getMessage().contains(ERROR_MAX_CAPACITY));
+
+        verify(reservationRepository, never()).save(any());
     }
 
     @Test
     void testAdjacentTimeSlots_Allowed() {
-        // Arrange
-        var firstSlotTime = futureTime;
-        var secondSlotTime = futureTime.plusHours(1); // Adjacent, not overlapping
+        var firstRequest = createReservationRequest(futureLdtTime, ADJ_PLATE_001);
+        var secondRequest = createReservationRequest(getTimeOneHourLater(futureLdtTime), ADJ_PLATE_002);
 
-        var firstRequest = new ReservationRequest(firstSlotTime, "ADJ001");
-        var secondRequest = new ReservationRequest(secondSlotTime, "ADJ002");
+        when(reservationRepository.countByTimeRange(any(Instant.class), any(Instant.class)))
+                .thenReturn(SAFE_CAPACITY);
 
-        // First slot has no conflicts
-        when(reservationRepository.findAllByTimeRange(
-                eq(firstSlotTime), eq(firstSlotTime.plusHours(1))))
+        when(reservationRepository.findAllByTimeRange(any(Instant.class), any(Instant.class)))
                 .thenReturn(new ArrayList<>());
 
-        // Second slot has no conflicts
-        when(reservationRepository.findAllByTimeRange(
-                eq(secondSlotTime), eq(secondSlotTime.plusHours(1))))
-                .thenReturn(new ArrayList<>());
-
-        // The key fix - reset the stream for each call
-        // First call returns a stream with the first available space
-        when(parkingSpaces.stream()).thenAnswer(invocation -> {
-            var mockSpace = new ParkingSpace(1);
-            return List.of(mockSpace).stream();
-        });
-
-        // Mock successful save
         when(reservationRepository.save(any())).thenAnswer(i -> {
-            var res = (ParkingReservation)i.getArgument(0);
-            // Create a properly formed reservation with the correct information
-            return new ParkingReservation(
-                    res.getSpaceId(),
-                    res.getStartTime(),
-                    res.getEndTime(),
-                    res.getLicensePlate()
-            );
+            var res = (ParkingReservation) i.getArgument(0);
+            return createMockReservation(res.getSpaceId(), res.getStartTime(), res.getEndTime(), res.getLicensePlate());
         });
 
-        // Act & Assert
-        // First reservation should succeed
+        doAnswer(invocation -> {
+            var res = (ParkingReservation) invocation.getArgument(0);
+            return createReservationResponse(res);
+        }).when(reservationMapper).toResponse(any());
+
         assertDoesNotThrow(() -> parkingService.createReservation(firstRequest));
-
-        // Reset the stream mock for the second call
-        // The second call needs a different space to avoid conflicts
-        when(parkingSpaces.stream()).thenAnswer(invocation -> {
-            var mockSpace = new ParkingSpace(2);
-            return Stream.of(mockSpace);
-        });
-
-        // Second reservation should also succeed
         assertDoesNotThrow(() -> parkingService.createReservation(secondRequest));
+        verify(reservationRepository, times(2)).save(any());
     }
 
-//    @Test
-//    void testSpaceAllocation_AllSpacesBooked() {
-//        // Arrange
-//        var request = new ReservationRequest(futureTime, "FULL001");
-//
-//        // Create fewer reservations than the 80% limit (so we pass the capacity check)
-//        var underCapacityReservations = new ArrayList<ParkingReservation>();
-//        for (int i = 0; i < 79; i++) {
-//            underCapacityReservations.add(createMockReservation(i + 1));
-//        }
-//
-//        // Set up the repository to return these reservations for capacity check
-//        when(reservationRepository.findAllByTimeRange(any(), any()))
-//                .thenReturn(underCapacityReservations);
-//
-//        // Create a list with all 100 spaces already reserved
-//        // This simulates the scenario where all spaces are booked for this time slot
-//        var allConflictingReservations = new ArrayList<ParkingReservation>();
-//        for (int i = 1; i <= 100; i++) {
-//            allConflictingReservations.add(createMockReservation(i));
-//        }
-//
-//        // This is the key part - when the service checks if a specific space is available,
-//        // we return the complete list of conflicts for ALL spaces
-//        when(reservationRepository.findAllByTimeRange(
-//                eq(futureTime), eq(futureTime.plusHours(1))))
-//                .thenReturn(allConflictingReservations);
-//
-//        // Set up the stream to return all parking spaces
-//        when(parkingSpaces.stream()).thenAnswer(invocation -> {
-//            // Return all 100 spaces
-//            var spaces = IntStream.rangeClosed(1, 100)
-//                    .mapToObj(ParkingSpace::new)
-//                    .collect(Collectors.toList());
-//            return spaces.stream();
-//        });
-//
-//        // Act & Assert
-//        // Should throw exception because no space is available
-//        // even though we're under 80% capacity
-//        var exception = assertThrows(ParkingFullException.class,
-//                () -> parkingService.createReservation(request));
-//        assertTrue(exception.getMessage().contains("No available parking spaces"));
-//    }
+    @Test
+    void testSpaceAllocation_AllSpacesBooked() {
+        var request = createReservationRequest(futureLdtTime, FULL_PLATE);
+
+        when(reservationRepository.countByTimeRange(any(Instant.class), any(Instant.class)))
+                .thenReturn(ALMOST_MAX_CAPACITY);
+
+        var allConflictingReservations = new ArrayList<ParkingReservation>();
+        IntStream.rangeClosed(1, TOTAL_SPACES).forEach(i ->
+                allConflictingReservations.add(createMockReservation(i, futureTime,
+                        getTimeOneHourLater(futureTime), MOCK_PLATE_PREFIX + i))
+        );
+
+        when(reservationRepository.findAllByTimeRange(any(Instant.class), any(Instant.class)))
+                .thenReturn(allConflictingReservations);
+
+        var exception = assertThrows(ParkingFullException.class,
+                () -> parkingService.createReservation(request));
+        assertTrue(exception.getMessage().contains(ERROR_NO_SPACE));
+
+        verify(reservationRepository, never()).save(any());
+    }
 
     @Test
     void testSameTimeConflict_DifferentSpace() {
-        // Arrange
-        var request = new ReservationRequest(futureTime, "CONF001");
+        var request = createReservationRequest(futureLdtTime, CONF_PLATE);
 
-        // Create a reservation for space #1 at the same time
-        var existingReservation = createMockReservation(1);
-        List<ParkingReservation> existingReservations = List.of(existingReservation);
+        when(reservationRepository.countByTimeRange(any(Instant.class), any(Instant.class)))
+                .thenReturn(SAFE_CAPACITY);
 
-        when(reservationRepository.findAllByTimeRange(any(), any()))
+        var existingReservation = createMockReservation(1, futureTime,
+                getTimeOneHourLater(futureTime), MOCK_PLATE_PREFIX + 1);
+        var existingReservations = List.of(existingReservation);
+
+        when(reservationRepository.findAllByTimeRange(any(Instant.class), any(Instant.class)))
                 .thenReturn(existingReservations);
-        when(reservationRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
-        // Act & Assert
-        // Should succeed but allocate a different space
+        when(reservationRepository.save(any())).thenAnswer(i -> {
+            var res = (ParkingReservation) i.getArgument(0);
+            res.setId(TEST_RESERVATION_ID);
+            return res;
+        });
+
+        doAnswer(invocation -> {
+            var res = (ParkingReservation) invocation.getArgument(0);
+            return createReservationResponse(res);
+        }).when(reservationMapper).toResponse(any());
+
         var result = parkingService.createReservation(request);
-        assertNotEquals(1, result.spaceId()); // Should not be space #1
-    }
 
-    // Helper method to create mock reservations
-    private ParkingReservation createMockReservation(int spaceId) {
-        return new ParkingReservation(
-                spaceId,
-                futureTime,
-                futureTime.plusHours(1),
-                "MOCK" + spaceId
-        );
+        assertNotEquals(1, result.getSpaceId());
+        verify(reservationRepository, times(1)).save(any());
     }
 }

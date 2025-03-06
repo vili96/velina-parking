@@ -1,7 +1,9 @@
 package com.example.parking.handler;
 
 import com.example.parking.exception.ParkingFullException;
+import com.example.parking.exception.ReservationConflictException;
 import com.example.parking.exception.ReservationNotFoundException;
+import com.example.parking.model.ApiResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -9,68 +11,58 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import java.time.LocalDateTime;
 import java.util.HashMap;
-import java.util.Map;
+
+import static com.example.parking.util.Constants.UNEXPECTED_ERROR_OCCURRED;
+import static com.example.parking.util.Constants.VALIDATION_ERROR;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(ParkingFullException.class)
-    public ResponseEntity<ErrorResponse> handleParkingFullException(ParkingFullException ex) {
-        var errorResponse = new ErrorResponse(
-                HttpStatus.CONFLICT.value(),
-                ex.getMessage(),
-                LocalDateTime.now()
+    public ResponseEntity<ApiResponse<Void>> handleParkingFullException(ParkingFullException ex) {
+        return new ResponseEntity<>(
+                ApiResponse.error(ex.getMessage(), HttpStatus.CONFLICT.value()),
+                HttpStatus.CONFLICT
         );
-        return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
     }
 
     @ExceptionHandler(ReservationNotFoundException.class)
-    public ResponseEntity<ErrorResponse> handleReservationNotFoundException(ReservationNotFoundException ex) {
-        var errorResponse = new ErrorResponse(
-                HttpStatus.NOT_FOUND.value(),
-                ex.getMessage(),
-                LocalDateTime.now()
+    public ResponseEntity<ApiResponse<Void>> handleReservationNotFoundException(ReservationNotFoundException ex) {
+        return new ResponseEntity<>(
+                ApiResponse.error(ex.getMessage(), HttpStatus.NOT_FOUND.value()),
+                HttpStatus.NOT_FOUND
         );
-        return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ValidationErrorResponse> handleValidationExceptions(
-            MethodArgumentNotValidException ex) {
+    public ResponseEntity<ApiResponse<Void>> handleValidationExceptions(MethodArgumentNotValidException ex) {
         var errors = new HashMap<String, String>();
         ex.getBindingResult().getAllErrors().forEach(error -> {
-            String fieldName = ((FieldError) error).getField();
-            String errorMessage = error.getDefaultMessage();
+            var fieldName = ((FieldError) error).getField();
+            var errorMessage = error.getDefaultMessage();
             errors.put(fieldName, errorMessage);
         });
 
-        var errorResponse = new ValidationErrorResponse(
-                HttpStatus.BAD_REQUEST.value(),
-                "Validation error",
-                LocalDateTime.now(),
-                errors
+        return new ResponseEntity<>(
+                ApiResponse.validationError(VALIDATION_ERROR, HttpStatus.BAD_REQUEST.value(), errors),
+                HttpStatus.BAD_REQUEST
         );
-        return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleGeneralException(Exception ex) {
-        var errorResponse = new ErrorResponse(
-                HttpStatus.INTERNAL_SERVER_ERROR.value(),
-                "An unexpected error occurred",
-                LocalDateTime.now()
+    public ResponseEntity<ApiResponse<Void>> handleGeneralException(Exception ex) {
+        return new ResponseEntity<>(
+                ApiResponse.error(UNEXPECTED_ERROR_OCCURRED, HttpStatus.INTERNAL_SERVER_ERROR.value()),
+                HttpStatus.INTERNAL_SERVER_ERROR
         );
-        return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
-    record ErrorResponse(int status, String message, LocalDateTime timestamp) {}
-
-    record ValidationErrorResponse(
-            int status,
-            String message,
-            LocalDateTime timestamp,
-            Map<String, String> errors
-    ) {}
+    @ExceptionHandler(ReservationConflictException.class)
+    public ResponseEntity<ApiResponse<Void>> handleReservationConflictException(ReservationConflictException ex) {
+        return new ResponseEntity<>(
+                ApiResponse.error(ex.getMessage(), HttpStatus.CONFLICT.value()),
+                HttpStatus.CONFLICT
+        );
+    }
 }

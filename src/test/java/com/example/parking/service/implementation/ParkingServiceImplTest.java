@@ -1,27 +1,36 @@
 package com.example.parking.service.implementation;
 
-import com.example.parking.model.ReservationRequest;
-import com.example.parking.exception.ParkingFullException;
-import com.example.parking.exception.ReservationNotFoundException;
 import com.example.parking.entity.ParkingReservation;
 import com.example.parking.entity.ParkingSpace;
+import com.example.parking.exception.ParkingFullException;
+import com.example.parking.exception.ReservationConflictException;
+import com.example.parking.exception.ReservationNotFoundException;
+import com.example.parking.mapper.ReservationMapper;
+import com.example.parking.model.ReservationResponse;
 import com.example.parking.repository.ParkingReservationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mapstruct.factory.Mappers;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
+import static com.example.parking.util.ParkingServiceTestHelper.*;
+import static com.example.parking.util.TestConstants.*;
+import static com.example.parking.util.TimeUtil.getTimeOneHourLater;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
-import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
 class ParkingServiceImplTest {
@@ -32,167 +41,147 @@ class ParkingServiceImplTest {
     @Mock
     private List<ParkingSpace> parkingSpaces;
 
+    @Spy
+    private ReservationMapper reservationMapper = Mappers.getMapper(ReservationMapper.class);
+
     @InjectMocks
     private ParkingServiceImpl parkingService;
 
-    private LocalDateTime futureStartTime;
-    private ParkingSpace availableSpace;
+    private LocalDateTime futureLdtStartTime;
     private ParkingReservation mockReservation;
+    private ReservationResponse mockResponse;
 
     @BeforeEach
     void setUp() {
-        // Set up future time for valid reservation
-        futureStartTime = LocalDateTime.now().plusHours(1);
+        futureLdtStartTime = getTimeOneHourLater(LocalDateTime.now());
+        var futureStartTime = futureLdtStartTime.atZone(ZoneId.systemDefault()).toInstant();
+        var spaces = createParkingSpaces();
 
-        // Create a test parking space
-        availableSpace = new ParkingSpace(1);
-
-        // Create a mock list of parking spaces
-        var spaces = new ArrayList<ParkingSpace>();
-        for (int i = 1; i <= 100; i++) {
-            spaces.add(new ParkingSpace(i));
-        }
-
-        // Setup mockReservation
-        mockReservation = new ParkingReservation(
-                1,
-                futureStartTime,
-                futureStartTime.plusHours(1),
-                "ABC123"
+        mockReservation = createMockReservation(
+                TEST_RESERVATION_ID, 1, futureStartTime, getTimeOneHourLater(futureStartTime), LICENSE_PLATE
         );
 
-        // Mock parkingSpaces behavior with lenient stubs
-        // (these won't be used in all test methods)
+        mockResponse = createReservationResponse(
+                TEST_RESERVATION_ID, 1, LICENSE_PLATE, futureLdtStartTime, getTimeOneHourLater(futureLdtStartTime)
+        );
+
         lenient().when(parkingSpaces.size()).thenReturn(100);
         lenient().when(parkingSpaces.stream()).thenReturn(spaces.stream());
     }
 
     @Test
     void createReservation_Success() {
-        // Arrange
-        var request = new ReservationRequest(futureStartTime, "ABC123");
+        var request = createReservationRequest(futureLdtStartTime, LICENSE_PLATE);
 
-        when(reservationRepository.findAllByTimeRange(any(), any())).thenReturn(new ArrayList<>());
-        when(reservationRepository.save(any())).thenReturn(mockReservation);
+        when(reservationRepository.countByTimeRange(any(Instant.class), any(Instant.class))).thenReturn(0L);
+        when(reservationRepository.findAllByTimeRange(any(Instant.class), any(Instant.class)))
+                .thenReturn(new ArrayList<>());
+        when(reservationRepository.save(any(ParkingReservation.class))).thenReturn(mockReservation);
 
-        // Act
+        doReturn(mockResponse).when(reservationMapper).toResponse(any(ParkingReservation.class));
+
         var result = parkingService.createReservation(request);
-
-        // Assert
         assertNotNull(result);
-        assertEquals(mockReservation.getId(), result.reservationId());
-        assertEquals(mockReservation.getSpaceId(), result.spaceId());
-        assertEquals(mockReservation.getLicensePlate(), result.licensePlate());
+        assertEquals(mockReservation.getId(), result.getReservationId());
+        assertEquals(mockReservation.getSpaceId(), result.getSpaceId());
+        assertEquals(mockReservation.getLicensePlate(), result.getLicensePlate());
 
-        verify(reservationRepository, times(1)).save(any());
+        verify(reservationRepository, times(1)).save(any(ParkingReservation.class));
     }
 
     @Test
     void createReservation_PastTime_ThrowsException() {
-        // Arrange
         var pastTime = LocalDateTime.now().minusHours(1);
-        var request = new ReservationRequest(pastTime, "ABC123");
+        var request = createReservationRequest(pastTime, LICENSE_PLATE);
 
-        // Act & Assert
-        assertThrows(IllegalArgumentException.class, () -> {
-            parkingService.createReservation(request);
-        });
-
+        assertThrows(IllegalArgumentException.class, () -> parkingService.createReservation(request));
         verify(reservationRepository, never()).save(any());
     }
 
     @Test
     void createReservation_ParkingFull_ThrowsException() {
-        // Arrange
-        var request = new ReservationRequest(futureStartTime, "ABC123");
+        var request = createReservationRequest(futureLdtStartTime, LICENSE_PLATE);
 
-        // Create list with 81 reservations (>80% of 100)
-        var fullReservations = new ArrayList<ParkingReservation>();
-        for (int i = 0; i < 81; i++) {
-            fullReservations.add(new ParkingReservation(
-                    i + 1,
-                    futureStartTime,
-                    futureStartTime.plusHours(1),
-                    "CAR" + i
-            ));
-        }
+        when(reservationRepository.countByTimeRange(any(Instant.class), any(Instant.class))).thenReturn(81L);
 
-        when(reservationRepository.findAllByTimeRange(any(), any())).thenReturn(fullReservations);
+        assertThrows(ParkingFullException.class, () -> parkingService.createReservation(request));
+        verify(reservationRepository, never()).save(any());
+    }
 
-        // Act & Assert
-        assertThrows(ParkingFullException.class, () -> {
-            parkingService.createReservation(request);
-        });
+    @Test
+    void createReservation_SameHour_ThrowsConflict() {
+        var request = createReservationRequest(futureLdtStartTime, LICENSE_PLATE);
+        var startInstant = futureLdtStartTime.atZone(ZoneId.systemDefault()).toInstant();
 
+        when(reservationRepository.findByLicensePlateAndExactStart(LICENSE_PLATE, startInstant))
+                .thenReturn(List.of(new ParkingReservation()));
+
+        assertThrows(ReservationConflictException.class, () -> parkingService.createReservation(request));
+        verify(reservationRepository, never()).save(any());
+    }
+
+    @Test
+    void createReservation_OverlappingTime_ThrowsConflict() {
+        var request = createReservationRequest(futureLdtStartTime, LICENSE_PLATE);
+        var startInstant = futureLdtStartTime.atZone(ZoneId.systemDefault()).toInstant();
+        var endInstant = getTimeOneHourLater(startInstant);
+
+        when(reservationRepository.findByLicensePlateAndExactStart(LICENSE_PLATE, startInstant))
+                .thenReturn(Collections.emptyList());
+        when(reservationRepository.findOverlappingByLicensePlate(LICENSE_PLATE, startInstant, endInstant))
+                .thenReturn(List.of(new ParkingReservation()));
+
+        assertThrows(ReservationConflictException.class, () -> parkingService.createReservation(request));
         verify(reservationRepository, never()).save(any());
     }
 
     @Test
     void cancelReservation_Success() {
-        // Arrange
-        var reservationId = "test-id";
+        var reservationId = TEST_RESERVATION_ID;
         when(reservationRepository.findById(reservationId)).thenReturn(Optional.of(mockReservation));
 
-        // Act
         parkingService.cancelReservation(reservationId);
-
-        // Assert
         verify(reservationRepository, times(1)).delete(mockReservation);
     }
 
     @Test
     void cancelReservation_NotFound_ThrowsException() {
-        // Arrange
-        var reservationId = "non-existent-id";
+        var reservationId = NON_EXISTENT_RESERVATION_ID;
         when(reservationRepository.findById(reservationId)).thenReturn(Optional.empty());
 
-        // Act & Assert
-        assertThrows(ReservationNotFoundException.class, () -> {
-            parkingService.cancelReservation(reservationId);
-        });
-
+        assertThrows(ReservationNotFoundException.class, () -> parkingService.cancelReservation(reservationId));
         verify(reservationRepository, never()).delete(any());
     }
 
     @Test
     void getReservation_Success() {
-        // Arrange
-        var reservationId = "test-id";
+        var reservationId = TEST_RESERVATION_ID;
         when(reservationRepository.findById(reservationId)).thenReturn(Optional.of(mockReservation));
+        doReturn(mockResponse).when(reservationMapper).toResponse(mockReservation);
 
-        // Act
         var result = parkingService.getReservation(reservationId);
-
-        // Assert
         assertNotNull(result);
-        assertEquals(mockReservation.getId(), result.reservationId());
-        assertEquals(mockReservation.getSpaceId(), result.spaceId());
+        assertEquals(mockReservation.getId(), result.getReservationId());
+        assertEquals(mockReservation.getSpaceId(), result.getSpaceId());
     }
 
     @Test
     void getReservation_NotFound_ThrowsException() {
-        // Arrange
-        var reservationId = "non-existent-id";
+        var reservationId = NON_EXISTENT_RESERVATION_ID;
         when(reservationRepository.findById(reservationId)).thenReturn(Optional.empty());
 
-        // Act & Assert
-        assertThrows(ReservationNotFoundException.class, () -> {
-            parkingService.getReservation(reservationId);
-        });
+        assertThrows(ReservationNotFoundException.class, () -> parkingService.getReservation(reservationId));
     }
 
     @Test
     void getAllReservations_Success() {
-        // Arrange
         var reservationList = List.of(mockReservation);
         when(reservationRepository.findAll()).thenReturn(reservationList);
+        doReturn(mockResponse).when(reservationMapper).toResponse(mockReservation);
 
-        // Act
         var result = parkingService.getAllReservations();
-
-        // Assert
         assertNotNull(result);
         assertEquals(1, result.size());
-        assertEquals(mockReservation.getId(), result.get(0).reservationId());
+        assertEquals(mockReservation.getId(), result.getFirst().getReservationId());
     }
 }

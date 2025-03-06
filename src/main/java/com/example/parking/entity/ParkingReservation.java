@@ -1,17 +1,27 @@
 package com.example.parking.entity;
 
-import java.time.LocalDateTime;
-import java.util.Objects;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.time.Instant;
 import java.util.UUID;
 
+@Entity
+@Data
+@NoArgsConstructor
+@Table(name = "parking_reservations")
 public class ParkingReservation {
-    private final String id;
-    private final int spaceId;
-    private final LocalDateTime startTime;
-    private final LocalDateTime endTime;
-    private final String licensePlate;
+    @Id
+    private String id;
+    private int spaceId;
+    private Instant startTime;
+    private Instant endTime;
+    private String licensePlate;
 
-    public ParkingReservation(int spaceId, LocalDateTime startTime, LocalDateTime endTime, String licensePlate) {
+    public ParkingReservation(int spaceId, Instant startTime, Instant endTime, String licensePlate) {
         this.id = UUID.randomUUID().toString();
         this.spaceId = spaceId;
         this.startTime = startTime;
@@ -19,36 +29,11 @@ public class ParkingReservation {
         this.licensePlate = licensePlate;
     }
 
-    public String getId() {
-        return id;
-    }
-
-    public int getSpaceId() {
-        return spaceId;
-    }
-
-    public LocalDateTime getStartTime() {
-        return startTime;
-    }
-
-    public LocalDateTime getEndTime() {
-        return endTime;
-    }
-
-    public String getLicensePlate() {
-        return licensePlate;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        var that = (ParkingReservation) o;
-        return Objects.equals(id, that.id);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(id);
+    public ParkingReservation(String id, int spaceId, Instant startTime, Instant endTime, String licensePlate) {
+        this.id = id;
+        this.spaceId = spaceId;
+        this.startTime = startTime;
+        this.endTime = endTime;
+        this.licensePlate = licensePlate;
     }
 }

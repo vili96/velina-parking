@@ -1,46 +1,48 @@
 package com.example.parking.controller;
 
+import com.example.parking.model.ApiResponse;
+import com.example.parking.model.ReservationListResponse;
 import com.example.parking.model.ReservationRequest;
 import com.example.parking.model.ReservationResponse;
 import com.example.parking.service.contract.ParkingService;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-
 @RestController
+@RequiredArgsConstructor
 @RequestMapping("/api/parking")
 public class ParkingController {
 
     private final ParkingService parkingService;
 
-    public ParkingController(ParkingService parkingService) {
-        this.parkingService = parkingService;
-    }
-
     @PostMapping("/reservations")
-    public ResponseEntity<ReservationResponse> createReservation(@Valid @RequestBody ReservationRequest request) {
+    public ResponseEntity<ApiResponse<ReservationResponse>> createReservation(
+            @Valid @RequestBody ReservationRequest request
+    ) {
         var response = parkingService.createReservation(request);
-        return new ResponseEntity<>(response, HttpStatus.CREATED);
+        return new ResponseEntity<>(ApiResponse.success(response), HttpStatus.CREATED);
     }
 
     @DeleteMapping("/reservations/{id}")
-    public ResponseEntity<Void> cancelReservation(@PathVariable String id) {
+    public ResponseEntity<ApiResponse<Void>> cancelReservation(@PathVariable String id) {
         parkingService.cancelReservation(id);
-        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+        return new ResponseEntity<>(ApiResponse.success(null), HttpStatus.OK);
     }
 
     @GetMapping("/reservations/{id}")
-    public ResponseEntity<ReservationResponse> getReservation(@PathVariable String id) {
+    public ResponseEntity<ApiResponse<ReservationResponse>> getReservation(@PathVariable String id) {
         var response = parkingService.getReservation(id);
-        return new ResponseEntity<>(response, HttpStatus.OK);
+        return new ResponseEntity<>(ApiResponse.success(response), HttpStatus.OK);
     }
 
     @GetMapping("/reservations")
-    public ResponseEntity<List<ReservationResponse>> getAllReservations() {
+    public ResponseEntity<ApiResponse<ReservationListResponse>> getAllReservations() {
         var reservations = parkingService.getAllReservations();
-        return new ResponseEntity<>(reservations, HttpStatus.OK);
+        var totalSpaces = parkingService.getTotalSpaces();
+        var listResponse = ReservationListResponse.from(reservations, totalSpaces);
+        return new ResponseEntity<>(ApiResponse.success(listResponse), HttpStatus.OK);
     }
 }

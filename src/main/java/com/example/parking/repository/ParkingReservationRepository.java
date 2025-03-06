@@ -1,43 +1,48 @@
 package com.example.parking.repository;
 
 import com.example.parking.entity.ParkingReservation;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.time.LocalDateTime;
-import java.util.ArrayList;
+import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
-import java.util.stream.Collectors;
 
 @Repository
-public class ParkingReservationRepository {
+public interface ParkingReservationRepository extends JpaRepository<ParkingReservation, String> {
 
-    private final List<ParkingReservation> reservations = new ArrayList<>();
+    @Query("""
+            SELECT r FROM ParkingReservation r
+            WHERE (r.startTime < :endTime AND r.endTime > :startTime)
+            """)
+    List<ParkingReservation> findAllByTimeRange(@Param("startTime") Instant startTime,
+                                                @Param("endTime") Instant endTime);
 
-    public ParkingReservation save(ParkingReservation reservation) {
-        reservations.add(reservation);
-        return reservation;
-    }
+    @Query("""
+            SELECT COUNT(r) FROM ParkingReservation r
+            WHERE (r.startTime < :endTime
+            AND r.endTime > :startTime)
+            """)
+    long countByTimeRange(@Param("startTime") Instant startTime,
+                          @Param("endTime") Instant endTime);
 
-    public Optional<ParkingReservation> findById(String id) {
-        return reservations.stream()
-                .filter(reservation -> reservation.getId().equals(id))
-                .findFirst();
-    }
+    @Query("""
+            SELECT r FROM ParkingReservation r
+            WHERE r.licensePlate = :licensePlate
+            AND r.startTime = :startTime
+            """)
+    List<ParkingReservation> findByLicensePlateAndExactStart(
+            @Param("licensePlate") String licensePlate,
+            @Param("startTime") Instant startTime);
 
-    public void delete(ParkingReservation reservation) {
-        reservations.remove(reservation);
-    }
-
-    public List<ParkingReservation> findAllByTimeRange(LocalDateTime start, LocalDateTime end) {
-        return reservations.stream()
-                .filter(reservation ->
-                        (reservation.getStartTime().isBefore(end) &&
-                                reservation.getEndTime().isAfter(start)))
-                .collect(Collectors.toList());
-    }
-
-    public List<ParkingReservation> findAll() {
-        return new ArrayList<>(reservations);
-    }
+    @Query("""
+            SELECT r FROM ParkingReservation r
+            WHERE r.licensePlate = :licensePlate
+            AND (r.startTime < :endTime AND r.endTime > :startTime)
+            """)
+    List<ParkingReservation> findOverlappingByLicensePlate(
+            @Param("licensePlate") String licensePlate,
+            @Param("startTime") Instant startTime,
+            @Param("endTime") Instant endTime);
 }

@@ -1,11 +1,18 @@
 package com.example.parking.model;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.time.LocalDateTime;
 
-public record ReservationResponse(
-        String reservationId,
-        int spaceId,
-        LocalDateTime startTime,
-        LocalDateTime endTime,
-        String licensePlate
-) {}
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class ReservationResponse {
+    private String reservationId;
+    private int spaceId;
+    private LocalDateTime startTime;
+    private LocalDateTime endTime;
+    private String licensePlate;
+}

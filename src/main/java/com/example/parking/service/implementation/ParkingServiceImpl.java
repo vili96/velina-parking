@@ -1,114 +1,139 @@
 package com.example.parking.service.implementation;
 
-import com.example.parking.model.ReservationRequest;
-import com.example.parking.model.ReservationResponse;
-import com.example.parking.exception.ParkingFullException;
-import com.example.parking.exception.ReservationNotFoundException;
 import com.example.parking.entity.ParkingReservation;
 import com.example.parking.entity.ParkingSpace;
+import com.example.parking.exception.ParkingFullException;
+import com.example.parking.exception.ReservationConflictException;
+import com.example.parking.exception.ReservationNotFoundException;
+import com.example.parking.mapper.ReservationMapper;
+import com.example.parking.model.ReservationRequest;
+import com.example.parking.model.ReservationResponse;
 import com.example.parking.repository.ParkingReservationRepository;
 import com.example.parking.service.contract.ParkingService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Random;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
+import static com.example.parking.util.Constants.*;
+import static com.example.parking.util.TimeUtil.getInstant;
+import static com.example.parking.util.TimeUtil.getTimeOneHourLater;
 
 @Service
+@RequiredArgsConstructor
 public class ParkingServiceImpl implements ParkingService {
 
-    private final List<ParkingSpace> parkingSpaces;
     private final ParkingReservationRepository reservationRepository;
-    private static final int MAX_CAPACITY_PERCENT = 80;
-
-    public ParkingServiceImpl(List<ParkingSpace> parkingSpaces, ParkingReservationRepository reservationRepository) {
-        this.parkingSpaces = parkingSpaces;
-        this.reservationRepository = reservationRepository;
-    }
+    private final ReservationMapper reservationMapper;
+    private final List<ParkingSpace> parkingSpaces;
+    private final Random random = new Random();
+    private final Object reservationLock = new Object();
 
     @Override
+    @Transactional(isolation = Isolation.SERIALIZABLE)
     public ReservationResponse createReservation(ReservationRequest request) {
-        // Validate that start time is in the future
-        if (request.startTime().isBefore(LocalDateTime.now())) {
-            throw new IllegalArgumentException("Reservation start time must be in the future");
+        synchronized (reservationLock) {
+            var requestStartTime = request.getStartTime();
+            var now = LocalDateTime.now();
+
+            if (requestStartTime.isBefore(now)) {
+                throw new IllegalArgumentException(MSG_RESERVATION_FUTURE);
+            }
+
+            var startTime = getInstant(requestStartTime);
+            var endTime = getTimeOneHourLater(startTime);
+            var sameHourList =
+                    reservationRepository.findByLicensePlateAndExactStart(request.getLicensePlate(), startTime);
+
+            if (!sameHourList.isEmpty()) {
+                throw new ReservationConflictException(String.format(MSG_RESERVATION_SAME_HOUR, request.getLicensePlate()));
+            }
+
+            var overlappingList = reservationRepository.findOverlappingByLicensePlate(
+                    request.getLicensePlate(),
+                    startTime,
+                    endTime
+            );
+
+            if (!overlappingList.isEmpty()) {
+                throw new ReservationConflictException(String.format(MSG_RESERVATION_CONFLICT, request.getLicensePlate()));
+            }
+
+            checkCapacity(startTime, endTime);
+
+            var spaceId = findAvailableSpace(startTime, endTime);
+            var reservation = new ParkingReservation(spaceId, startTime, endTime, request.getLicensePlate());
+            var saved = reservationRepository.save(reservation);
+
+            return reservationMapper.toResponse(saved);
         }
-
-        // Calculate end time (1 hour slot)
-        var endTime = request.startTime().plusHours(1);
-
-        // Find active reservations for the requested time slot
-        var activeReservations = reservationRepository.findAllByTimeRange(
-                request.startTime(), endTime);
-
-        // Check if parking lot utilization would exceed 80%
-        var maxSpaces = parkingSpaces.size() * MAX_CAPACITY_PERCENT / 100;
-        if (activeReservations.size() >= maxSpaces) {
-            throw new ParkingFullException("Parking lot is at maximum capacity for the requested time slot");
-        }
-
-        // Find an available space
-        var availableSpaceOpt = parkingSpaces.stream()
-                .filter(space -> isSpaceAvailable(space, request.startTime(), endTime))
-                .findFirst();
-
-        if (availableSpaceOpt.isEmpty()) {
-            throw new ParkingFullException("No available parking spaces for the requested time slot");
-        }
-
-        var availableSpace = availableSpaceOpt.get();
-
-        // Create and save reservation
-        var reservation = new ParkingReservation(
-                availableSpace.getId(),
-                request.startTime(),
-                endTime,
-                request.licensePlate()
-        );
-
-        var savedReservation = reservationRepository.save(reservation);
-
-        return mapToResponse(savedReservation);
     }
 
     @Override
+    @Transactional
     public void cancelReservation(String reservationId) {
-        var reservation = reservationRepository.findById(reservationId)
-                .orElseThrow(() -> new ReservationNotFoundException("Reservation not found with id: " + reservationId));
+        synchronized (reservationLock) {
+            var reservation = reservationRepository.findById(reservationId)
+                    .orElseThrow(() -> new ReservationNotFoundException(
+                            MSG_RESERVATION_NOT_FOUND + reservationId));
 
-        reservationRepository.delete(reservation);
+            reservationRepository.delete(reservation);
+        }
     }
 
     @Override
     public ReservationResponse getReservation(String reservationId) {
         var reservation = reservationRepository.findById(reservationId)
-                .orElseThrow(() -> new ReservationNotFoundException("Reservation not found with id: " + reservationId));
-
-        return mapToResponse(reservation);
+                .orElseThrow(() -> new ReservationNotFoundException(
+                        MSG_RESERVATION_NOT_FOUND + reservationId));
+        return reservationMapper.toResponse(reservation);
     }
 
     @Override
     public List<ReservationResponse> getAllReservations() {
-        return reservationRepository.findAll().stream()
-                .map(this::mapToResponse)
+        var reservations = reservationRepository.findAll();
+        return reservations.stream()
+                .map(reservationMapper::toResponse)
                 .collect(Collectors.toList());
     }
 
-    private boolean isSpaceAvailable(ParkingSpace space, LocalDateTime start, LocalDateTime end) {
-        // Check if there are any reservations for this space during the requested time slot
-        var conflictingReservations = reservationRepository.findAllByTimeRange(start, end).stream()
-                .filter(reservation -> reservation.getSpaceId() == space.getId())
-                .findAny();
-
-        return conflictingReservations.isEmpty();
+    @Override
+    public int getTotalSpaces() {
+        return parkingSpaces.size();
     }
 
-    private ReservationResponse mapToResponse(ParkingReservation reservation) {
-        return new ReservationResponse(
-                reservation.getId(),
-                reservation.getSpaceId(),
-                reservation.getStartTime(),
-                reservation.getEndTime(),
-                reservation.getLicensePlate()
-        );
+    private void checkCapacity(Instant startTime, Instant endTime) {
+        var reservationCount = reservationRepository.countByTimeRange(startTime, endTime);
+        var maxReservations = (int) (parkingSpaces.size() * MAX_CAPACITY_PERCENTAGE);
+        if (reservationCount >= maxReservations) {
+            throw new ParkingFullException(MSG_MAX_CAPACITY);
+        }
+    }
+
+    private int findAvailableSpace(Instant startTime, Instant endTime) {
+        var conflictingReservations = reservationRepository.findAllByTimeRange(startTime, endTime);
+        var occupiedSpaces = new HashSet<Integer>();
+
+        conflictingReservations.forEach(r -> occupiedSpaces.add(r.getSpaceId()));
+
+        var totalSpaces = parkingSpaces.size();
+        var availableSpaces = IntStream.rangeClosed(1, totalSpaces)
+                .filter(spaceId -> !occupiedSpaces.contains(spaceId))
+                .boxed()
+                .toList();
+
+        if (availableSpaces.isEmpty()) {
+            throw new ParkingFullException(MSG_NO_SPACE_AVAILABLE);
+        }
+
+        return availableSpaces.get(random.nextInt(availableSpaces.size()));
     }
 }
